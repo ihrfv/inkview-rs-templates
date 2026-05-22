@@ -1,0 +1,22 @@
+[template]
+cargo_generate_version = ">=0.17.0"
+
+[template.syntax]
+skip = [
+    "**/*.db",
+    "**/*.json",
+    "**/*.lock",
+    ".devenv/**",
+    "**/.DS_Store"
+]
+
+[placeholders.framework]
+type = "string"
+prompt = "Which UI framework are you using?"
+choices = ["none", "slint", "embedded-graphics"]
+default = "none"
+
+# If they didn't pick slint, completely remove these files from the generated project
+[conditional.'framework != "slint"']
+ignore = ["ui/", "build.rs"]
+

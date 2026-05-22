@@ -1,0 +1,16 @@
+{% raw %}
+# justfile for pb-universal-ai-rs
+
+# Cargo build profile.
+cargo_profile := "dev"
+# Pocketbook SDK version. Either "5.19", "6.5", "6.8", "6.10"
+pb_sdk_version := "6.10"
+
+[private]
+cargo_sdk_feature := "sdk-" + replace(pb_sdk_version, ".", "-")
+[private]
+zigbuild_target := "armv7-unknown-linux-gnueabi.2.23"
+
+build:
+    cargo zigbuild --target {{zigbuild_target}} --profile {{cargo_profile}} --features={{cargo_sdk_feature}}
+{% endraw %}
