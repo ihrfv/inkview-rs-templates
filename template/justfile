@@ -1,16 +1,59 @@
-{% raw %}
-# justfile for pb-universal-ai-rs
+# justfile for {{crate_name}}
 
 # Cargo build profile.
 cargo_profile := "dev"
 # Pocketbook SDK version. Either "5.19", "6.5", "6.8", "6.10"
 pb_sdk_version := "6.10"
+# Pocketbook device identifier as it's folder name when connected with USB.
+# - Pocketbook Inkpad 4: "6678-3C5A"
+# - Pocketbook Touch Lux 3: "PB626"
+# - Pocketbook Touch 3 HD: "PB632"
+pb_device := "PB632"
 
+[private]
+binary := "{{crate_name}}"
+[private]
+pb_mount_root := if os() == "macos" { "/Volumes" } else { "/run/media/$USER" }
 [private]
 cargo_sdk_feature := "sdk-" + replace(pb_sdk_version, ".", "-")
 [private]
+build_target := "armv7-unknown-linux-gnueabi"
+[private]
 zigbuild_target := "armv7-unknown-linux-gnueabi.2.23"
+[private]
+cargo_out_profile := if cargo_profile == "dev" { "debug" } else { cargo_profile }
 
+{% raw %}
+default:
+    just --list
+
+[doc("""
+Build the application.
+Command examples:
+1. `just build` -- it would take the default cargo_profile
+2. `just cargo_profile=release build`
+""")]
 build:
     cargo zigbuild --target {{zigbuild_target}} --profile {{cargo_profile}} --features={{cargo_sdk_feature}}
+
+[doc("""
+Transfer a built binary to the device via USB.
+Options:
+- `target_app_name` - name of the application (as is) on the targeted device
+                      the `binary` is going to be renamed to.
+                      For example: inkview-slint-demo.app
+Command examples:
+1. `just deploy-usb` -- it would take the default cargo_profile, and pb_device, as well a default target_app_name
+2. `just cargo_profile=release pb_device=POCKETBOOK deploy-usb inkview-slint-demo.app`
+""")]
+deploy-usb target_app_name="application.app":
+    # 1. Copying the binary to the device
+    cp "target/{{build_target / cargo_out_profile / binary}}" \
+        {{ pb_mount_root / pb_device / "applications" / target_app_name }}
+    # 2. Cleaning up macOS metadata files (if applicable)
+    {{ if os() == "macos" { "dot_clean " + (pb_mount_root / pb_device / "applications") } else {"echo 'No cleanup needed'"} }}
+    # 3. Flushing the filesytem cache
+    sync {{pb_mount_root / pb_device}}
+    @echo "Deployment successful!"
+
 {% endraw %}
