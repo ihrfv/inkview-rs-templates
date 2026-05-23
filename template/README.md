@@ -2,7 +2,7 @@
 
 ## Set-up
 
-Similarly to [inkview-rs](https://github.com/simmsb/inkview-rs/tree/master) the project set up relies on:
+Similarly to [inkview-rs](https://github.com/simmsb/inkview-rs) the project set up relies on:
 1. [Zig](https://ziglang.org/learn/getting-started/#installing-zig)
     Necessary for `cargo-zigbuild` which is used to properly perform linking process during.
 1. [just](https://github.com/casey/just)
@@ -17,3 +17,15 @@ The aformentioned components must be installed in order to simplify project comp
 ```bash
 just build
 ```
+
+## Deploying
+
+There are various ways of deploying the application (see [inkview-rs](https://github.com/simmsb/inkview-rs) for different depoyment strategies).
+
+Meanwhile, one can addapt to their needs the script `./pb_build_and_deploy_ssh.sh` and call it.
+The script does the following:
+1. Increases the process's soft limit for the number of open file descriptors;
+1. Build in `release` mode the application
+1. Registers the ssh key necessary for the connection
+1. Deploys it via `scp` and `ssh` to the device.
+The application won't show up immediately - instead it will start up and you should select in in the list of openned apps (hold the home button for 3sec).
