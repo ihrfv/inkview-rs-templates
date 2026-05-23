@@ -11,11 +11,9 @@ cargo install cargo-generate
 
 ## Creating a new project
 
-At this point in time, the templating project is not yet published to crates.io, therefore, the only way to use it is to clone this repo first, and to invoke `cargo-generate` with a `--path` arg.
-
-Here is the syntax:
+Here is the syntax to create a new project from this template:
 ```bash
-cargo generate --path inkview-templates/ template --name <PROJECT_NAME> --define framework=<FRAMEWORK_TYPE>
+cargo generate --git https://github.com/ihrfv/inkview-rs-templates.git template --name <PROJECT_NAME> --define framework=<FRAMEWORK_TYPE>
 ```
 
 `<FRAMEWORK_TYPE>` can be:
@@ -23,4 +21,18 @@ cargo generate --path inkview-templates/ template --name <PROJECT_NAME> --define
 * `slint` - for `inkview-slint` example project
 * `embedded-graphics` - for `inkview-eg` example project
 
-After creating the project, please update the project name in `Cargo.toml`
+For example:
+```bash
+cargo generate --git https://github.com/ihrfv/inkview-rs-templates.git template --name test-slint --define framework=slint
+```
+
+To test that it works execute inside of the newely generate project:
+```bash
+just build
+```
+
+**NOTE:** on macOS it may fail to build `debug` release for the `slint` project.
+To correct it, one should execute first increase the process's soft limit for the number of open file descriptors:
+```bash
+ulimit -n 4096
+```
