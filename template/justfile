@@ -34,7 +34,11 @@ Command examples:
 2. `just cargo_profile=release build`
 """)]
 build:
-    cargo zigbuild --target {{zigbuild_target}} --profile {{cargo_profile}} --features={{cargo_sdk_feature}}
+    cargo zigbuild \
+        --target {{zigbuild_target}} \
+        --profile {{cargo_profile}} \
+        --features={{cargo_sdk_feature}} \
+        --bin {{binary}}
 
 [doc("""
 Transfer a built binary to the device via USB.
