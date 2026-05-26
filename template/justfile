@@ -9,9 +9,21 @@ pb_sdk_version := "6.10"
 # - Pocketbook Touch Lux 3: "PB626"
 # - Pocketbook Touch 3 HD: "PB632"
 pb_device := "PB632"
+# Pocketbook's ssh username
+pb_ssh_user := "reader"
+# Pocketbook's IP address
+pb_ssh_ip := "192.168.1.27"
+# Pocketbook's openned port that accepts ssh connection
+pb_ssh_port := "2222"
+# Pocketbook's target directory, where the deployed app via SSH would land
+pb_target_app_dir := "/mnt/ext1/applications"
+# Pocketbook's application name your binary is going to be deployed as
+pb_target_app_name := "{{crate_name}}.app"
 
 [private]
 binary := "{{crate_name}}"
+[private]
+ssh_key_path := "$HOME/.ssh/id_rsa"
 [private]
 pb_mount_root := if os() == "macos" { "/Volumes" } else { "/run/media/$USER" }
 [private]
@@ -28,36 +40,61 @@ default:
     just --list
 
 [doc("""
-Build the application.
-Command examples:
+Optional helper method.
+It helps to preconfigure file descriptor limit, and to add SSH key to the ssh-agent
+""")]
+preconfigure-build-and-deploy-ssh:
+    @echo "Setting file descriptor limit..."
+    ulimit -n 4096
+    @echo "Adding SSH key..."
+    eval "$(ssh-agent -s)"
+    ssh-add {{ ssh_key_path }}
+
+[doc("""
+build the application.
+command examples:
 1. `just build` -- it would take the default cargo_profile
 2. `just cargo_profile=release build`
 """)]
 build:
     cargo zigbuild \
-        --target {{zigbuild_target}} \
-        --profile {{cargo_profile}} \
-        --features={{cargo_sdk_feature}} \
-        --bin {{binary}}
-
+        --target {{ zigbuild_target }} \
+        --profile {{ cargo_profile }} \
+        --features={{ cargo_sdk_feature }} \
+        --bin {{ binary }}
 [doc("""
 Transfer a built binary to the device via USB.
-Options:
-- `target_app_name` - name of the application (as is) on the targeted device
-                      the `binary` is going to be renamed to.
-                      For example: inkview-slint-demo.app
 Command examples:
-1. `just deploy-usb` -- it would take the default cargo_profile, and pb_device, as well a default target_app_name
-2. `just cargo_profile=release pb_device=POCKETBOOK deploy-usb inkview-slint-demo.app`
+1. `just deploy-usb`
+2. `just cargo_profile=release pb_device=POCKETBOOK pb_app_name="inkview-slint-demo.app" deploy-usb`
 """)]
-deploy-usb target_app_name="application.app":
+deploy-usb:
     # 1. Copying the binary to the device
-    cp "target/{{build_target / cargo_out_profile / binary}}" \
-        {{ pb_mount_root / pb_device / "applications" / target_app_name }}
+    cp "target/{{ build_target / cargo_out_profile / binary }}" \
+        "{{ pb_mount_root / pb_device / 'applications' / pb_target_app_name }}"
     # 2. Cleaning up macOS metadata files (if applicable)
-    {{ if os() == "macos" { "dot_clean " + (pb_mount_root / pb_device / "applications") } else {"echo 'No cleanup needed'"} }}
+    {{ if os() == "macos" { "dot_clean " + (pb_mount_root / pb_device / "applications") } else { "echo 'No cleanup needed'" } }}
     # 3. Flushing the filesytem cache
-    sync {{pb_mount_root / pb_device}}
+    sync {{ pb_mount_root / pb_device }}
     @echo "Deployment successful!"
 
-{% endraw %}
+[doc("""
+Transfer a built binary to the device via SSH.
+Command examples:
+1. `just deploy-ssh`
+2. `just cargo_profile=release deploy-ssh`
+3. `just cargo_profile=release pb_user="root" pb_app_name="test.app" deploy-ssh`
+""")]
+deploy-ssh:
+    @echo "Sending application '{{ binary }}' .."
+    scp -O -P {{ pb_ssh_port }} -o HostKeyAlgorithms=+ssh-rsa \
+        {{ "target" / build_target / cargo_out_profile / binary }} \
+        "{{ pb_ssh_user }}@{{ pb_ssh_ip }}:'{{ pb_target_app_dir }}/{{ pb_target_app_name }}.stage'"
+
+    @echo "Restarting application on target..."
+    ssh -p {{ pb_ssh_port }} -o HostKeyAlgorithms=+ssh-rsa {{ pb_ssh_user }}@{{ pb_ssh_ip }} \
+        "sh -c \"killall '{{ pb_target_app_name }}'; mv '{{ pb_target_app_dir }}/{{ pb_target_app_name }}.stage' '{{ pb_target_app_dir }}/{{ pb_target_app_name }}'; '{{ pb_target_app_dir }}/{{ pb_target_app_name }}'\""
+
+build-deploy-ssh: build deploy-ssh
+
+ {% endraw %}
