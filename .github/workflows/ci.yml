@@ -1,0 +1,32 @@
+name: CI Generate and build all templates
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-templates:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [ "none", "slint", "embedded-graphics" ]
+    steps:
+      - name: Checkout template
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Generate and build project within devenv shell
+        run: |
+          nix run github:cachix/devenv -- shell bash -c "
+            cargo generate --path . template --name test-${{ matrix.framework }} --define framework=${{ matrix.framework }} --destination /tmp --silent
+            cd /tmp/test-${{ matrix.framework }}
+            just build
+          "
