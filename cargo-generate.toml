@@ -1,6 +1,10 @@
 [template]
 cargo_generate_version = ">=0.17.0"
 
+ignore = [
+    "devenv.lock",
+]
+
 [template.syntax]
 skip = [
     "**/*.db",

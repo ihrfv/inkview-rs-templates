@@ -1,6 +1,5 @@
 /target
 Cargo.lock
-devenv.lock
 .DS_Store
 .devenv/
 .direnv/
