@@ -69,3 +69,41 @@ overridden on the command line (`just cargo_profile=release pb_device=PB632 depl
 
 `template/src/lib.rs` exists (currently empty) so generated projects have a lib+bin layout; the
 binary is built with `--bin {{crate_name}}`.
+
+## Settled questions — don't re-litigate these
+
+Each of these was investigated at length on 2026-07-21. Re-deriving them is expensive.
+
+- **The `armv7-unknown-linux-gnueabi` target is correct.** The PB632 is soft-float: its own
+  binaries, `libinkview.so`, `libfontconfig.so.1`, and `/lib/ld-linux.so.3` all carry
+  `e_flags 0x05000200`, identical to ours. It runs glibc 2.23, exactly matching the
+  `.2.23` zigbuild suffix.
+- **`devenv.nix` sourcing hard-float (`armv7l-hf-multiplatform`) cross libs is deliberate.**
+  It looks wrong for a soft-float target, but those `.so`s only resolve symbols at link time —
+  the device loads its own soft-float libraries at runtime. **Do not switch to a soft-float
+  `crossSystem`**: it is in no binary cache and needs 37 derivations built from source (two GCC
+  bootstraps, two glibc builds, then fontconfig's stack), turning a ~5 min CI leg into hours for
+  zero runtime benefit.
+- **The slint variant links `libfontconfig.so.1` at runtime and that is fine.** The device
+  provides it, and all 24 `Fc*` symbols we import are exported by its (older) copy. The binary
+  requires at most `GLIBC_2.18`.
+- **`pb_ssh_ip` in the justfile is a placeholder, not a stale value.** The device is on DHCP;
+  override per invocation (`just pb_ssh_ip="..." deploy-ssh`). Do not "fix" the checked-in IP.
+
+## Working on this repo
+
+- **Use the justfile recipes** (`just build`, `just deploy-ssh`) rather than hand-rolling the
+  underlying `cargo zigbuild`/`scp` commands. The recipes are part of what is being tested;
+  reimplementing them means debugging something the user does not ship.
+- **CI failures reading `path '/nix/store/...' is not valid` are transient.** Re-run the job
+  before investigating.
+- **Large `scp` transfers to the device fail often** (~1 in 3 for an 8 MB binary), leaving no
+  partial file. The cause is *unknown* — filename, memory pressure, quoting, and stdin were all
+  hypothesised and all refuted. Do not infer a pattern from a handful of runs; retry, then
+  confirm integrity with `md5sum` on device against local `md5`.
+- **A green CI only means it compiles.** Runtime correctness needs a real device. As of
+  2026-07-21 only the slint variant has been run-tested on hardware.
+- Device userland is BusyBox: no `readelf`/`nm`/`file`, and its `od` rejects `-A`/`-j`/`-N`.
+  Read ELF fields with `dd if=<file> bs=1 skip=36 count=4 | od -x`, or `scp` the file and
+  inspect it locally. USB mounting exposes only `/mnt/ext1`, never the rootfs — use SSH for
+  anything about system libraries.
