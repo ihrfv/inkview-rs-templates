@@ -23,8 +23,6 @@ pb_target_app_name := "{{crate_name}}.app"
 [private]
 binary := "{{crate_name}}"
 [private]
-ssh_key_path := "$HOME/.ssh/id_rsa"
-[private]
 pb_mount_root := if os() == "macos" { "/Volumes" } else { "/run/media/$USER" }
 [private]
 cargo_sdk_feature := "sdk-" + replace(pb_sdk_version, ".", "-")
@@ -40,26 +38,21 @@ default:
     just --list
 
 [doc("""
-Optional helper method.
-It helps to preconfigure file descriptor limit, and to add SSH key to the ssh-agent
-""")]
-preconfigure-build-and-deploy-ssh:
-    @echo "Setting file descriptor limit..."
-    ulimit -n 4096
-    @echo "Adding SSH key..."
-    eval "$(ssh-agent -s)"
-    ssh-add {{ ssh_key_path }}
-
-[doc("""
 build the application.
 command examples:
 1. `just build` -- it would take the default cargo_profile
 2. `just cargo_profile=release build`
+3. `just pb_sdk_version=6.5 build`
 """)]
 build:
+    # The SDK features are mutually exclusive, so the default one must be turned
+    # off before selecting another. Raising the descriptor limit keeps debug
+    # builds of the slint variant working on macOS.
+    ulimit -n 4096 2>/dev/null || true; \
     cargo zigbuild \
         --target {{ zigbuild_target }} \
         --profile {{ cargo_profile }} \
+        --no-default-features \
         --features={{ cargo_sdk_feature }} \
         --bin {{ binary }}
 [doc("""
@@ -94,6 +87,8 @@ deploy-ssh:
     @echo "Restarting application on target..."
     ssh -p {{ pb_ssh_port }} -o HostKeyAlgorithms=+ssh-rsa {{ pb_ssh_user }}@{{ pb_ssh_ip }} \
         "sh -c \"killall '{{ pb_target_app_name }}'; mv '{{ pb_target_app_dir }}/{{ pb_target_app_name }}.stage' '{{ pb_target_app_dir }}/{{ pb_target_app_name }}'; '{{ pb_target_app_dir }}/{{ pb_target_app_name }}'\""
+
+build-deploy-usb: build deploy-usb
 
 build-deploy-ssh: build deploy-ssh
 

@@ -45,9 +45,6 @@ direnv allow   # first run builds the cross toolchain and takes a while
 just build
 ```
 
-**NOTE:** on macOS, `debug` builds of the `slint` variant fail unless the process's soft limit for
-open file descriptors is raised first:
-```bash
-ulimit -n 4096
-```
-The generated `just preconfigure-build-and-deploy-ssh` recipe does this for you.
+**NOTE:** on macOS, `debug` builds of the `slint` variant need a raised soft limit for open file
+descriptors. The generated `build` recipe raises it to 4096 itself, so no manual `ulimit -n 4096` is
+required.
