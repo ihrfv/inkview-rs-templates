@@ -3,6 +3,8 @@ name = "{{crate_name}}"
 version = "0.1.0"
 edition = "2021"
 
+description = "A PocketBook e-reader application built on inkview-rs"
+license = "MIT"
 keywords = ["inkview", "pocketbook", "eink"]
 
 [dependencies]
@@ -25,10 +27,26 @@ slint-build = { version = "1.14.1" }
 {% endif %}
 
 [features]
+# Exactly one sdk-* feature must be enabled; they select mutually exclusive FFI
+# bindings. `just build` passes --no-default-features so that overriding
+# pb_sdk_version replaces this default rather than stacking on top of it.
 default = ["sdk-6-10"]
+{% if framework == "slint" %}
+sdk-5-19 = ["inkview/sdk-5-19", "inkview-slint/sdk-5-19"]
+sdk-6-5 = ["inkview/sdk-6-5", "inkview-slint/sdk-6-5"]
+sdk-6-8 = ["inkview/sdk-6-8", "inkview-slint/sdk-6-8"]
+sdk-6-10 = ["inkview/sdk-6-10", "inkview-slint/sdk-6-10"]
+{% elsif framework == "embedded-graphics" %}
+sdk-5-19 = ["inkview/sdk-5-19", "inkview-eg/sdk-5-19"]
+sdk-6-5 = ["inkview/sdk-6-5", "inkview-eg/sdk-6-5"]
+sdk-6-8 = ["inkview/sdk-6-8", "inkview-eg/sdk-6-8"]
+sdk-6-10 = ["inkview/sdk-6-10", "inkview-eg/sdk-6-10"]
+{% else %}
+sdk-5-19 = ["inkview/sdk-5-19"]
 sdk-6-5 = ["inkview/sdk-6-5"]
 sdk-6-8 = ["inkview/sdk-6-8"]
 sdk-6-10 = ["inkview/sdk-6-10"]
+{% endif %}
 
 [profile.release]
 opt-level = "s"

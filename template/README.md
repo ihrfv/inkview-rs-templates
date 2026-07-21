@@ -65,13 +65,8 @@ just cargo_profile=release build  # release profile
 `cargo zigbuild --target armv7-unknown-linux-gnueabi.2.23`, and that `.2.23` glibc suffix is what
 makes the result load on the reader's userspace.
 {% if framework == "slint" %}
-**On macOS**, debug builds of the Slint variant fail unless the open-file limit is raised:
-
-```bash
-ulimit -n 4096
-```
-
-`just preconfigure-build-and-deploy-ssh` does this for you.
+On macOS, debug builds of the Slint variant exhaust the default open-file limit. The `build` recipe
+raises it to 4096 for the duration of the build, so no manual `ulimit` step is needed.
 {% endif %}
 
 ## Configuration
@@ -85,7 +80,7 @@ just cargo_profile=release pb_device=PB632 deploy-usb
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `cargo_profile` | `dev` | Cargo build profile. |
-| `pb_sdk_version` | `6.10` | PocketBook SDK — selects the `sdk-6-10` Cargo feature. Also `5.19`, `6.5`, `6.8`. |
+| `pb_sdk_version` | `6.10` | PocketBook SDK — selects the `sdk-6-10` Cargo feature. Also `5.19`, `6.5`, `6.8`. Exactly one is active per build. |
 | `pb_device` | `PB632` | Volume name of the device when mounted over USB. |
 | `pb_ssh_user` | `reader` | SSH username on the device. |
 | `pb_ssh_ip` | `192.168.1.27` | **Placeholder.** The device is on DHCP — override per invocation. |
@@ -103,19 +98,21 @@ below.
 Connect the reader, then:
 
 ```bash
-just cargo_profile=release deploy-usb
+just cargo_profile=release build-deploy-usb
 ```
 
-This copies the binary onto the mounted volume, cleans up macOS metadata files, and flushes the
-filesystem cache. `pb_device` must match the volume name — known values are `PB632`
-(Touch HD 3), `PB626` (Touch Lux 3), and `6678-3C5A` (InkPad 4).
+This builds, copies the binary onto the mounted volume, cleans up macOS metadata files, and flushes
+the filesystem cache. `pb_device` must match the volume name — known values are `PB632`
+(Touch HD 3), `PB626` (Touch Lux 3), and `6678-3C5A` (InkPad 4). Use `deploy-usb` on its own to skip
+the build.
 
 ### Over SSH
 
-Once per shell, raise the file-descriptor limit and load your SSH key:
+Load your SSH key once per shell — this has to run in your own shell, not in a recipe, since a
+`just` recipe cannot export into the shell that invoked it:
 
 ```bash
-just preconfigure-build-and-deploy-ssh
+eval "$(ssh-agent -s)" && ssh-add ~/.ssh/id_rsa
 ```
 
 Then build and deploy in one step:
