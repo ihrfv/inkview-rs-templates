@@ -38,5 +38,12 @@ in
       pkgsCross.libpng.dev
       pkgsCross.zlib.dev
     ];
+{% if framework == "slint" %}
+    # slint-build embeds glyphs at compile time and resolves "sans-serif" on the
+    # *build* machine. A shell without discoverable system fonts fails with
+    # "could not determine a default font for sans-serif", so name the font
+    # explicitly -- this also keeps the embedded font identical on every host.
+    SLINT_DEFAULT_FONT = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
+{% endif %}
   };
 }

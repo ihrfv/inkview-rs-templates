@@ -2,9 +2,7 @@ name: CI Generate and build all templates
 
 on:
   push:
-    branches: [master]
   pull_request:
-    branches: [master]
 
 permissions:
   contents: read
@@ -20,6 +18,12 @@ defaults:
 jobs:
   build-templates:
     runs-on: ubuntu-latest
+    # Every branch push is built. `pull_request` then only adds coverage for
+    # forks, whose commits never land on this repo as a push -- without this
+    # guard a same-repo PR would build the identical commit twice.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       fail-fast: false
       matrix:
