@@ -3,11 +3,19 @@
 This repository is adjacent to [inkview-rs](https://github.com/simmsb/inkview-rs/tree/master).
 It provides you with the templating mechanism to create new configured vanilla `inkview`, `inkview-eg`, and `inkview-slint` projects.
 
-## Prerequisits
-You must have `cargo-generate` installed. You can do it with
+## Prerequisites
+
+To generate a project you need `cargo-generate`:
 ```bash
 cargo install cargo-generate
 ```
+
+The *generated* project cross-compiles for the reader and needs
+[Nix](https://nixos.org/download/) + [direnv](https://direnv.net/docs/installation.html) +
+[devenv](https://devenv.sh/getting-started/), plus [Zig](https://ziglang.org/learn/getting-started/#installing-zig)
+and [just](https://github.com/casey/just). The template ships a `devenv.nix`/`.envrc` that supplies
+the cross toolchain, but `just build` will not work until direnv has loaded it — see the generated
+project's own README.
 
 ## Creating a new project
 
@@ -26,13 +34,20 @@ For example:
 cargo generate --git https://github.com/ihrfv/inkview-rs-templates.git template --name test-slint --define framework=slint
 ```
 
-To test that it works execute inside of the newely generate project:
+To generate from a local checkout of this repository instead (this is what CI does):
 ```bash
+cargo generate --path . template --name test-slint --define framework=slint --destination /tmp
+```
+
+To test that it works, execute inside of the newly generated project:
+```bash
+direnv allow   # first run builds the cross toolchain and takes a while
 just build
 ```
 
-**NOTE:** on macOS it may fail to build `debug` release for the `slint` project.
-To correct it, one should execute first increase the process's soft limit for the number of open file descriptors:
+**NOTE:** on macOS, `debug` builds of the `slint` variant fail unless the process's soft limit for
+open file descriptors is raised first:
 ```bash
 ulimit -n 4096
 ```
+The generated `just preconfigure-build-and-deploy-ssh` recipe does this for you.
