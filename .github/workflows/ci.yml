@@ -4,29 +4,77 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build-templates:
     runs-on: ubuntu-latest
+    # Every branch push is built. `pull_request` then only adds coverage for
+    # forks, whose commits never land on this repo as a push -- without this
+    # guard a same-repo PR would build the identical commit twice.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       fail-fast: false
       matrix:
         framework: [ "none", "slint", "embedded-graphics" ]
     steps:
       - name: Checkout template
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v30
+        uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v8
+      # Configures the devenv substituter, so devenv is fetched prebuilt
+      # instead of being compiled from source on every run.
+      - name: Set up devenv binary cache
+        uses: cachix/cachix-action@v17
+        with:
+          name: devenv
 
-      - name: Generate and build project within devenv shell
+      - name: Install devenv and cargo-generate
         run: |
-          nix run github:cachix/devenv -- shell bash -c "
-            cargo generate --path . template --name test-${{ matrix.framework }} --define framework=${{ matrix.framework }} --destination /tmp --silent
-            cd /tmp/test-${{ matrix.framework }}
-            just build
-          "
+          nix profile install github:cachix/devenv/v2.1.2
+          nix profile install nixpkgs#cargo-generate
+
+      - name: Generate project
+        run: |
+          cargo generate --path . template \
+            --name "test-${{ matrix.framework }}" \
+            --define framework=${{ matrix.framework }} \
+            --destination "$RUNNER_TEMP" \
+            --vcs none \
+            --silent
+
+      # Asserts the templating rules themselves, not just that the code compiles.
+      - name: Check generated layout
+        working-directory: ${{ runner.temp }}/test-${{ matrix.framework }}
+        run: |
+          test -f devenv.nix
+          test -f devenv.yaml
+          test -f devenv.lock
+          if [ "${{ matrix.framework }}" = slint ]; then
+            test -f build.rs
+            test -f ui/main.slint
+          else
+            test ! -e build.rs
+            test ! -e ui
+          fi
+
+      # Builds inside the devenv the template ships to users.
+      - name: Build
+        working-directory: ${{ runner.temp }}/test-${{ matrix.framework }}
+        run: devenv shell just build
