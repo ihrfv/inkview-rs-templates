@@ -87,6 +87,57 @@ just cargo_profile=release pb_device=PB632 deploy-usb
 | `pb_ssh_port` | `2222` | SSH port on the device. |
 | `pb_target_app_dir` | `/mnt/ext1/applications` | Where the app lands on the device. |
 | `pb_target_app_name` | `{{crate_name}}.app` | Filename the binary is deployed as. |
+| `pb_emu_sdk_version` | `6.10` | SDK the emulator uses. Independent of `pb_sdk_version`; `6.8` also works. |
+| `pb_emu_device` | `632` | Device identity the emulator reports. |
+| `pb_emu_resmode` | `8` | Emulated screen geometry — `8` is 1072x1448. The justfile lists the other values. |
+
+## Running on your computer (emulator)
+
+You do not need the device to see the app. The PocketBook SDK ships a **host x86_64 build of
+`libinkview.so`**, and `inkview` loads its library at runtime rather than linking it, so the same
+code runs on a desktop and draws into an X11 window.
+
+The tooling lives in [inkview-rs-emu](https://github.com/ihrfv/inkview-rs-emu), shared by every inkview-rs
+project rather than vendored into this one, so it can be updated without regenerating. Install it
+once per machine:
+
+```bash
+git clone https://github.com/ihrfv/inkview-rs-emu ~/tools/inkview-rs-emu
+export PATH="$HOME/tools/inkview-rs-emu:$PATH"   # add to your shell profile
+```
+
+It needs Docker **running** (Docker Desktop does not start itself) and, on macOS,
+[XQuartz](https://www.xquartz.org) — `run-emu` configures that for you:
+
+```bash
+brew install --cask xquartz             # macOS only
+
+just fetch-emu-assets                   # one-time, 0.6-1.3 GB download, ~40 MB kept
+just emu-image                          # one-time, builds the container
+just pb_emu_resmode=3 build-run-emu     # build for the host, open a window
+just build-screenshot-emu               # headless -> target/emu/screenshot.png
+```
+
+Assets are cached in `~/.cache/inkview-emu` and shared across projects, so the download happens once
+per machine, not once per project.
+
+To *drive* the app — tap, swipe, keys — add inkview-rs-emu's `inkview-pilot` crate; its README has the
+few lines of wiring. The emulator's window drops synthetic X11 clicks, so that crate is the only way
+to interact with it programmatically.
+
+### Caveats
+
+- `pb_emu_resmode` sets the window size and X11 does not scale it, so the 1072x1448 default
+  overflows most laptop screens. Pass `pb_emu_resmode=3` (828x1200) for interactive runs and leave
+  it at the default for screenshots, where the real geometry is what you want.
+- `pb_emu_sdk_version` accepts `6.10` (default) and `6.8`; other SDK archives ship no host build.
+  The two use different containers — see inkview-rs-emu's README.
+- The emulator approximates the panel but not e-ink refresh behaviour, so timing-sensitive update
+  code still has to be checked on real hardware. For firmware-level questions, inkview-emu documents
+  escalating to pbemu.
+- On Apple Silicon, enable *Use Rosetta for x86/amd64 emulation* in Docker Desktop to keep it fast.
+- `just emu-shell` drops into the container with `ldd`, `readelf` and `xdpyinfo` when a binary
+  refuses to start.
 
 ## Deploying
 

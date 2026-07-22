@@ -31,10 +31,14 @@ cargo generate --git https://github.com/ihrfv/inkview-rs-templates.git template 
 The generated project needs Nix + direnv + devenv (it ships `devenv.nix`/`.envrc`), which supply
 `zig`, `cargo-zigbuild`, `just`, and the cross `pkg-config`/fontconfig search paths.
 
-There are no unit tests. The only verification is "does each of the three frameworks generate and
-cross-compile" — see `.github/workflows/ci.yml`, which matrixes over all three inside a devenv shell.
-Always check all three variants after touching shared files; a Liquid or Cargo.toml change that
-works for `none` can easily break `slint`.
+There are no unit tests. Verification is "does each of the three frameworks generate, cross-compile,
+and render a frame under the SDK emulator" — see `.github/workflows/ci.yml`, which matrixes over all
+three inside a devenv shell. The emulator leg is the only run-time assertion in the repo: it fails
+on a panic in the log and on a frame smaller than the emulated panel, and uploads the capture as an
+artifact. Always check all three variants after touching shared files; a Liquid or Cargo.toml change
+that works for `none` can easily break `slint`.
+
+Locally, the same check is `just build-screenshot-emu` inside a generated project (see below).
 
 ## Editing the template — Liquid vs. `just`/Slint syntax
 
@@ -69,6 +73,45 @@ overridden on the command line (`just cargo_profile=release pb_device=PB632 depl
 
 `template/src/lib.rs` exists (currently empty) so generated projects have a lib+bin layout; the
 binary is built with `--bin {{crate_name}}`.
+
+## Desktop emulator in generated projects
+
+Generated projects can run on the developer's machine instead of the device: the SDK ships a **host
+x86_64 build of `libinkview.so`**, and since `inkview::load()` resolves the library by name at
+runtime, a build for `x86_64-unknown-linux-gnu` against that copy runs the real app in an X11 window.
+
+**The tooling is not in this repo.** It lives in
+[inkview-rs-emu](https://github.com/ihrfv/inkview-rs-emu) — container definitions, the staging logic, the
+XQuartz setup, the SDK matrix, and the `inkview-pilot` crate for tap/swipe/key input. It used to be
+vendored into `template/utils/emulator/`; it was extracted so every inkview-rs project shares one
+copy that can be updated without regenerating. Its README and CLAUDE.md are where the mechanism and
+its constraints are documented — do not re-document them here, and check there first when something
+emulator-shaped breaks.
+
+What remains here is delegation:
+
+- The `*-emu` recipes in `template/justfile` pass `pb_emu_*` through as `PB_EMU_*` environment
+  variables and call `inkview-emu`. A `_require-emu` guard fails with install instructions rather
+  than `command not found` halfway through a docker invocation.
+- Emulator variables go **above** the `{% raw %}` block like every other justfile variable; the
+  recipes interpolating them go inside it. Inside that block use `{{ binary }}`, **not**
+  `{{ crate_name }}` — cargo-generate never substitutes inside `{% raw %}`, so `crate_name` would
+  reach `just` as an undefined variable and fail at parse time.
+- `.github/workflows/ci.yml` clones inkview-emu at a pinned ref onto `$GITHUB_PATH` and caches
+  `~/.cache/inkview-emu`. Bump the ref deliberately; an unpinned clone would let an unrelated change
+  there break this pipeline.
+- `devenv.nix` gates the x86_64 cross pkg-config and fontconfig behind
+  `{% if framework == "slint" %}` deliberately: only slint links C libraries, and merely referencing
+  `pkgsCrossEmu.fontconfig.dev` forces a cross build that `none` and `embedded-graphics` users would
+  pay for and never use. The `x86_64-unknown-linux-gnu` Rust target is unconditional, since all
+  three variants build for it.
+- **`template/Cargo.toml` carries a `[patch.crates-io]` for `inkview`, and it is temporary.**
+  Published `inkview` 0.3.0 panics under the emulator (`Failed to get current task framebuffer`)
+  because `GetTaskFramebuffer` returns NULL there; simmsb/inkview-rs#24 adds a `GetCanvas()`
+  fallback but is unreleased, so the patch points at a branch on the fork carrying it. Verified by
+  running: `framework=none` works without the patch (raw FFI, never constructs a `Screen`), while
+  `slint` and `embedded-graphics` both panic inside `Screen::new`. Delete the section once a fixed
+  release reaches crates.io.
 
 ## Settled questions — don't re-litigate these
 
