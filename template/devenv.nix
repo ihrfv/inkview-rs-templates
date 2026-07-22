@@ -53,12 +53,21 @@ in
     ];
 {% if framework == "slint" %}
     # Both cross pkg-config packages export a global PKG_CONFIG, so whichever
-    # lands last would answer for every target. Name the wrapper per target
-    # instead, which makes the two independent of package order.
-    PKG_CONFIG_armv7_unknown_linux_gnueabi = "armv7l-unknown-linux-gnueabihf-pkg-config";
+    # lands last would answer for every target. Point each target at its own
+    # wrapper instead, which makes the two independent of package order.
+    #
+    # The wrapper's name has to be *derived*, not written out: nixpkgs prefixes
+    # it only when the target genuinely differs from the build machine. gnu64 is
+    # a real cross from aarch64-darwin (`x86_64-unknown-linux-gnu-pkg-config`)
+    # but native on an x86_64 Linux builder, where the binary is plain
+    # `pkg-config` -- so a hardcoded prefix builds fine on a Mac and fails in CI.
+    # Using the store path also removes the PATH-ordering hazard above entirely.
+    PKG_CONFIG_armv7_unknown_linux_gnueabi =
+      "${pkgsCross.buildPackages.pkg-config}/bin/${pkgsCross.stdenv.cc.targetPrefix}pkg-config";
 
     # Same search paths again, for the emulator target.
-    PKG_CONFIG_x86_64_unknown_linux_gnu = "x86_64-unknown-linux-gnu-pkg-config";
+    PKG_CONFIG_x86_64_unknown_linux_gnu =
+      "${pkgsCrossEmu.buildPackages.pkg-config}/bin/${pkgsCrossEmu.stdenv.cc.targetPrefix}pkg-config";
     PKG_CONFIG_PATH_x86_64_unknown_linux_gnu = lib.makeSearchPath "lib/pkgconfig" [
       pkgsCrossEmu.fontconfig.dev
       pkgsCrossEmu.freetype.dev
