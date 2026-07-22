@@ -78,3 +78,60 @@ jobs:
       - name: Build
         working-directory: ${{ runner.temp }}/test-${{ matrix.framework }}
         run: devenv shell just build
+
+      # The emulator tooling is a separate project now, shared by every
+      # inkview-rs app. Pinned so a change there cannot break this pipeline
+      # without a deliberate bump here.
+      - name: Install inkview-emu
+        run: |
+          git clone --depth 1 --branch "$INKVIEW_EMU_REF" \
+            https://github.com/ihrfv/inkview-rs-emu "$RUNNER_TEMP/inkview-rs-emu"
+          echo "$RUNNER_TEMP/inkview-rs-emu" >> "$GITHUB_PATH"
+        env:
+          INKVIEW_EMU_REF: main
+
+      # Only the extracted host subtree is cached (~40 MB); with it in place
+      # `fetch-emu-assets` skips the SDK download entirely. The cache now lives
+      # outside the generated project, since assets are shared across projects.
+      - name: Cache emulator assets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/inkview-emu
+          key: emu-assets-6.10-v1
+
+      # The runner is x86_64, so the SDK's host libinkview runs natively here --
+      # no emulation. This is the only step that asserts anything at run time
+      # rather than compile time.
+      - name: Render a frame in the SDK emulator
+        working-directory: ${{ runner.temp }}/test-${{ matrix.framework }}
+        run: |
+          devenv shell just fetch-emu-assets
+          devenv shell just emu-image
+          devenv shell just build-emu
+          devenv shell just screenshot-emu 2>&1 | tee emu.log
+
+          # A panic in the app's worker thread does not stop inkview, so the
+          # capture can succeed while the app is already dead. Check the log too.
+          if grep -q 'panicked' emu.log; then
+            echo "::error::the application panicked under the emulator"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import struct, sys
+          with open("target/emu/screenshot.png", "rb") as f:
+              width, height = struct.unpack(">II", f.read(24)[16:24])
+          print(f"captured {width}x{height}")
+          # The emulated panel is 1072x1448, but the capture is trimmed to
+          # painted content, so allow a margin instead of an exact match.
+          if width < 1000 or height < 1400:
+              sys.exit(f"frame too small, the app likely never drew: {width}x{height}")
+          PY
+
+      - name: Upload the rendered frame
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-${{ matrix.framework }}
+          path: ${{ runner.temp }}/test-${{ matrix.framework }}/target/emu/screenshot.png
+          if-no-files-found: warn

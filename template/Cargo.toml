@@ -52,3 +52,15 @@ sdk-6-10 = ["inkview/sdk-6-10"]
 opt-level = "s"
 lto = true
 strip = true
+
+# The desktop emulator (`just run-emu`) hands back a NULL task framebuffer, which
+# makes inkview 0.3.0's Screen::new panic with "Failed to get current task
+# framebuffer while creating new screen." simmsb/inkview-rs#24 falls back to
+# GetCanvas() there, but is not in a published release yet, so resolve inkview
+# from a branch carrying that fix. Without this the slint and embedded-graphics
+# variants cannot start under the emulator; on device, either version works.
+#
+# TODO: delete this section once an inkview release with the fix is on crates.io,
+# and let the version requirement above resolve normally.
+[patch.crates-io]
+inkview = { git = "https://github.com/ihrfv/inkview-rs", branch = "emulator" }

@@ -92,4 +92,92 @@ build-deploy-usb: build deploy-usb
 
 build-deploy-ssh: build deploy-ssh
 
+# --- Desktop emulator -------------------------------------------------------
+# Run the app on this machine instead of the device: the SDK ships a host x86_64
+# build of libinkview, and inkview loads its library by name at runtime.
+#
+# The tooling itself lives in a separate project, shared by every inkview-rs
+# app, so it can be updated without regenerating yours:
+#
+#     git clone https://github.com/ihrfv/inkview-rs-emu ~/tools/inkview-rs-emu
+#     export PATH="$HOME/tools/inkview-rs-emu:$PATH"
+#
+# See its README for the SDK matrix, driving the app with tap/swipe/key input,
+# and the firmware-level emulator to escalate to.
+
+# SDK version the emulator uses -- "6.8" or "6.10". Independent of
+# pb_sdk_version: this only picks which host libinkview the desktop build runs
+# against.
+pb_emu_sdk_version := "6.10"
+# Device the emulator presents. Must match a hwconfig_<device> in the cached
+# system/ tree ("inkview-emu shell" can list them).
+pb_emu_device := "632"
+# Screen geometry the emulator uses (inkview's `emu_resmode`). Known values:
+#   0      = emulator default    1, 6 = 758x1024     2 = 768x1024
+#   3      = 828x1200            4, 5 = 1200x1600    7 = 480x800
+#   8,9,10 = 1072x1448          11,12 = 1404x1872
+# 8 matches the 632 (Touch HD 3) default above, which is what `screenshot-emu`
+# wants. X11 does not scale the window, though, so 1448 rows overflow a typical
+# laptop screen: for `run-emu` pass a smaller mode, e.g. `pb_emu_resmode=3`.
+pb_emu_resmode := "8"
+
+[private]
+emu_env := "PB_EMU_SDK_VERSION=" + pb_emu_sdk_version + \
+    " PB_EMU_DEVICE=" + pb_emu_device + \
+    " PB_EMU_RESMODE=" + pb_emu_resmode + \
+    " CARGO_PROFILE=" + cargo_profile
+
+# Fail with something actionable rather than "command not found" in the middle
+# of a docker invocation.
+[private]
+_require-emu:
+    #!/usr/bin/env bash
+    command -v inkview-emu >/dev/null && exit 0
+    echo "inkview-emu is not on PATH. Install it with:" >&2
+    echo "  git clone https://github.com/ihrfv/inkview-rs-emu ~/tools/inkview-rs-emu" >&2
+    echo "  export PATH=\"\$HOME/tools/inkview-rs-emu:\$PATH\"" >&2
+    exit 1
+
+# One-time: fetch the SDK host subtree and runtime system/ tree into
+# ~/.cache/inkview-emu, where every project on this machine shares them.
+fetch-emu-assets: _require-emu
+    {{ emu_env }} inkview-emu fetch-assets
+
+# Build the emulator's runtime container image (one-time, per SDK version).
+emu-image: _require-emu
+    {{ emu_env }} inkview-emu image
+
+# Build the application for the desktop emulator (host x86_64 linux).
+build-emu: _require-emu
+    {{ emu_env }} inkview-emu build {{ binary }}
+
+[doc("""
+Run the application in the SDK emulator, in a window on this machine.
+Needs an X server: XQuartz on macOS (configured for you), the local display
+elsewhere. The window is `pb_emu_resmode` pixels large and X11 will not scale
+it, so pass a smaller mode to see all of it:
+`just pb_emu_resmode=3 run-emu`   # 828x1200
+Command example: `just run-emu`
+""")]
+run-emu *args: _require-emu
+    {{ emu_env }} inkview-emu run {{ binary }} {{ args }}
+
+[doc("""
+Run the application in the emulator against a throwaway X server and save the
+first frame to "target/emu/screenshot.png". Needs no X server on this machine,
+so it also works in CI.
+Command example: `just screenshot-emu`
+""")]
+screenshot-emu *args: _require-emu
+    {{ emu_env }} inkview-emu shot {{ binary }} {{ args }}
+
+# Open a shell in the emulator container (ldd, readelf, xdpyinfo).
+emu-shell: _require-emu
+    {{ emu_env }} inkview-emu shell
+
+build-run-emu: build-emu run-emu
+
+build-screenshot-emu: build-emu screenshot-emu
+
+
  {% endraw %}
